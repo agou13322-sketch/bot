@@ -3,7 +3,7 @@ import asyncio
 from telegram import Update
 from telegram.ext import ApplicationBuilder, CommandHandler, MessageHandler, ContextTypes, filters
 
-TOKEN = "你的BotToken"
+TOKEN = "8391943092:AAHx2XPe7sMteKpBvb9PJEDyHMbovtVrJWY"
 
 games = {}
 
@@ -162,4 +162,5 @@ def main():
 
 
 if __name__ == "__main__":
+
     main()
