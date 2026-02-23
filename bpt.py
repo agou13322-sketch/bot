@@ -29,7 +29,7 @@ async def smart(update: Update, context: ContextTypes.DEFAULT_TYPE):
     chat_id = update.effective_chat.id
 
     if chat_id in games:
-        await update.message.reply_text("⚠️ Casino đã đang chạy.")
+        await update.message.reply_text("⚠️ Casino đang chạy.")
         return
 
     games[chat_id] = {
@@ -128,11 +128,9 @@ async def game_loop(context: ContextTypes.DEFAULT_TYPE, chat_id):
             if choice == result:
                 winners.append(name)
 
+        # ✅ 已删除显示骰子和总数
         message = f"""
 🎲 KẾT QUẢ
-
-🎯 {d1} | {d2} | {d3}
-Tổng: {total}
 
 Kết quả: {result}
 """
@@ -162,5 +160,4 @@ def main():
 
 
 if __name__ == "__main__":
-
     main()
