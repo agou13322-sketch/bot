@@ -114,7 +114,10 @@ async def game_loop(context: ContextTypes.DEFAULT_TYPE, chat_id):
             if chat_id not in games:
                 return
 
-        await context.bot.send_message(chat_id=chat_id, text="🔒 ĐÃ KHÓA CƯỢC\nĐang lắc xúc xắc...")
+        await context.bot.send_message(
+            chat_id=chat_id,
+            text="🔒 ĐÃ KHÓA CƯỢC\nĐang lắc xúc xắc..."
+        )
 
         await asyncio.sleep(2)
 
@@ -128,18 +131,17 @@ async def game_loop(context: ContextTypes.DEFAULT_TYPE, chat_id):
             if choice == result:
                 winners.append(name)
 
-        # ✅ 已删除显示骰子和总数
+        # ✅ 只显示结果
         message = f"""
 🎲 KẾT QUẢ
 
 Kết quả: {result}
 """
 
+        # ✅ 只有有赢家才显示
         if winners:
             message += "\n🏆 NGƯỜI THẮNG:\n"
             message += "\n".join(winners)
-        else:
-            message += "\nKhông có người thắng."
 
         await context.bot.send_message(chat_id=chat_id, text=message)
 
