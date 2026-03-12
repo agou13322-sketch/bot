@@ -7,6 +7,7 @@ from telegram.ext import ApplicationBuilder, CommandHandler, MessageHandler, Con
 TOKEN = "8391943092:AAHx2XPe7sMteKpBvb9PJEDyHMbovtVrJWY"
 
 games = {}
+active_chats = set()
 
 UTC8 = timezone(timedelta(hours=8))
 
@@ -23,16 +24,20 @@ def auto_time_allowed():
     now = datetime.now(UTC8)
     hour = now.hour
 
-    if 3 <= hour < 4:
+    if 15 <= hour < 16:
         return True
 
-    if 22 <= hour <= 23:
+    if 22 <= hour < 24:
         return True
 
     return False
 
 
 async def start(update: Update, context: ContextTypes.DEFAULT_TYPE):
+
+    chat_id = update.effective_chat.id
+    active_chats.add(chat_id)
+
     await update.message.reply_text(
         "🎰 BOT CASINO TÀI XỈU\n\n"
         "/smart - Mở bàn casino\n"
@@ -42,14 +47,15 @@ async def start(update: Update, context: ContextTypes.DEFAULT_TYPE):
 
 
 async def smart(update: Update, context: ContextTypes.DEFAULT_TYPE):
+
     chat_id = update.effective_chat.id
+    active_chats.add(chat_id)
 
     if chat_id in games:
         await update.message.reply_text("⚠️ Casino đang chạy.")
         return
 
     games[chat_id] = {
-        "running": True,
         "bets": {},
         "round": 0,
         "countdown": 60,
@@ -57,12 +63,13 @@ async def smart(update: Update, context: ContextTypes.DEFAULT_TYPE):
         "manual": True
     }
 
-    await update.message.reply_text("🎰 CASINO ĐÃ MỞ (Manual)")
+    await update.message.reply_text("🎰 CASINO ĐÃ MỞ")
 
     context.application.create_task(game_loop(context, chat_id))
 
 
 async def stop(update: Update, context: ContextTypes.DEFAULT_TYPE):
+
     chat_id = update.effective_chat.id
 
     if chat_id in games:
@@ -71,6 +78,7 @@ async def stop(update: Update, context: ContextTypes.DEFAULT_TYPE):
 
 
 async def open_now(update: Update, context: ContextTypes.DEFAULT_TYPE):
+
     chat_id = update.effective_chat.id
 
     if chat_id in games:
@@ -79,6 +87,7 @@ async def open_now(update: Update, context: ContextTypes.DEFAULT_TYPE):
 
 
 async def bet(update: Update, context: ContextTypes.DEFAULT_TYPE):
+
     chat_id = update.effective_chat.id
 
     if chat_id not in games:
@@ -130,11 +139,15 @@ async def game_loop(context: ContextTypes.DEFAULT_TYPE, chat_id):
                 break
 
             if game["countdown"] % 10 == 0:
-                await context.bot.edit_message_text(
-                    chat_id=chat_id,
-                    message_id=msg.message_id,
-                    text=f"🎲 BÀN #{game['round']}\n\n⏳ Còn {game['countdown']} giây để cược"
-                )
+
+                try:
+                    await context.bot.edit_message_text(
+                        chat_id=chat_id,
+                        message_id=msg.message_id,
+                        text=f"🎲 BÀN #{game['round']}\n\n⏳ Còn {game['countdown']} giây để cược"
+                    )
+                except:
+                    pass
 
             await asyncio.sleep(1)
             game["countdown"] -= 1
@@ -162,7 +175,9 @@ async def game_loop(context: ContextTypes.DEFAULT_TYPE, chat_id):
         message = f"""
 🎲 KẾT QUẢ
 
-Kết quả: {result}
+🎯 Xúc xắc: {d1} - {d2} - {d3}
+🔢 Tổng: {total}
+📢 Kết quả: {result}
 """
 
         if winners:
@@ -178,17 +193,36 @@ async def auto_scheduler(context: ContextTypes.DEFAULT_TYPE):
 
     while True:
 
-        for chat_id in list(games.keys()):
+        for chat_id in list(active_chats):
 
-            game = games[chat_id]
+            if auto_time_allowed():
 
-            if not game.get("manual", False):
+                if chat_id not in games:
 
-                if not auto_time_allowed():
+                    games[chat_id] = {
+                        "bets": {},
+                        "round": 0,
+                        "countdown": 60,
+                        "force_open": False,
+                        "manual": False
+                    }
 
                     await context.bot.send_message(
                         chat_id=chat_id,
-                        text="⏰ Hết giờ casino."
+                        text="🎰 CASINO TỰ ĐỘNG MỞ"
+                    )
+
+                    context.application.create_task(
+                        game_loop(context, chat_id)
+                    )
+
+            else:
+
+                if chat_id in games and not games[chat_id].get("manual", False):
+
+                    await context.bot.send_message(
+                        chat_id=chat_id,
+                        text="⏰ HẾT GIỜ CASINO"
                     )
 
                     games.pop(chat_id)
@@ -197,17 +231,19 @@ async def auto_scheduler(context: ContextTypes.DEFAULT_TYPE):
 
 
 def main():
+
     app = ApplicationBuilder().token(TOKEN).build()
 
     app.add_handler(CommandHandler("start", start))
     app.add_handler(CommandHandler("smart", smart))
     app.add_handler(CommandHandler("stop", stop))
     app.add_handler(CommandHandler("open", open_now))
+
     app.add_handler(MessageHandler(filters.TEXT & ~filters.COMMAND, bet))
 
     print("Bot casino đang chạy...")
 
-    app.job_queue.run_repeating(auto_scheduler, interval=60, first=10)
+    app.job_queue.run_once(auto_scheduler, 5)
 
     app.run_polling()
 
