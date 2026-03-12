@@ -1,11 +1,14 @@
 import random
 import asyncio
+from datetime import datetime, timedelta, timezone
 from telegram import Update
 from telegram.ext import ApplicationBuilder, CommandHandler, MessageHandler, ContextTypes, filters
 
 TOKEN = "8391943092:AAHx2XPe7sMteKpBvb9PJEDyHMbovtVrJWY"
 
 games = {}
+
+UTC8 = timezone(timedelta(hours=8))
 
 
 def roll_dice():
@@ -14,6 +17,19 @@ def roll_dice():
 
 def get_result(total):
     return "Tài" if total >= 11 else "Xỉu"
+
+
+def auto_time_allowed():
+    now = datetime.now(UTC8)
+    hour = now.hour
+
+    if 3 <= hour < 4:
+        return True
+
+    if 22 <= hour <= 23:
+        return True
+
+    return False
 
 
 async def start(update: Update, context: ContextTypes.DEFAULT_TYPE):
@@ -37,10 +53,11 @@ async def smart(update: Update, context: ContextTypes.DEFAULT_TYPE):
         "bets": {},
         "round": 0,
         "countdown": 60,
-        "force_open": False
+        "force_open": False,
+        "manual": True
     }
 
-    await update.message.reply_text("🎰 CASINO ĐÃ MỞ")
+    await update.message.reply_text("🎰 CASINO ĐÃ MỞ (Manual)")
 
     context.application.create_task(game_loop(context, chat_id))
 
@@ -83,9 +100,20 @@ async def bet(update: Update, context: ContextTypes.DEFAULT_TYPE):
 
 
 async def game_loop(context: ContextTypes.DEFAULT_TYPE, chat_id):
+
     while chat_id in games:
 
         game = games[chat_id]
+
+        if not game.get("manual", False):
+            if not auto_time_allowed():
+                await context.bot.send_message(
+                    chat_id=chat_id,
+                    text="⏰ Ngoài giờ hoạt động, casino tự động đóng."
+                )
+                games.pop(chat_id)
+                return
+
         game["round"] += 1
         game["bets"] = {}
         game["countdown"] = 60
@@ -131,14 +159,12 @@ async def game_loop(context: ContextTypes.DEFAULT_TYPE, chat_id):
             if choice == result:
                 winners.append(name)
 
-        # ✅ 只显示结果
         message = f"""
 🎲 KẾT QUẢ
 
 Kết quả: {result}
 """
 
-        # ✅ 只有有赢家才显示
         if winners:
             message += "\n🏆 NGƯỜI THẮNG:\n"
             message += "\n".join(winners)
@@ -146,6 +172,28 @@ Kết quả: {result}
         await context.bot.send_message(chat_id=chat_id, text=message)
 
         await asyncio.sleep(8)
+
+
+async def auto_scheduler(context: ContextTypes.DEFAULT_TYPE):
+
+    while True:
+
+        for chat_id in list(games.keys()):
+
+            game = games[chat_id]
+
+            if not game.get("manual", False):
+
+                if not auto_time_allowed():
+
+                    await context.bot.send_message(
+                        chat_id=chat_id,
+                        text="⏰ Hết giờ casino."
+                    )
+
+                    games.pop(chat_id)
+
+        await asyncio.sleep(60)
 
 
 def main():
@@ -158,6 +206,9 @@ def main():
     app.add_handler(MessageHandler(filters.TEXT & ~filters.COMMAND, bet))
 
     print("Bot casino đang chạy...")
+
+    app.job_queue.run_repeating(auto_scheduler, interval=60, first=10)
+
     app.run_polling()
 
 
