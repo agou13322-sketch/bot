@@ -1,15 +1,33 @@
 import random
 import asyncio
+import json
+import os
 from datetime import datetime, timedelta, timezone
 from telegram import Update
 from telegram.ext import ApplicationBuilder, CommandHandler, MessageHandler, ContextTypes, filters
 
 TOKEN = "8391943092:AAHx2XPe7sMteKpBvb9PJEDyHMbovtVrJWY"
 
+GROUP_FILE = "groups.json"
+
 games = {}
-active_chats = set()
 
 UTC8 = timezone(timedelta(hours=8))
+
+
+def load_groups():
+    if os.path.exists(GROUP_FILE):
+        with open(GROUP_FILE, "r") as f:
+            return set(json.load(f))
+    return set()
+
+
+def save_groups():
+    with open(GROUP_FILE, "w") as f:
+        json.dump(list(active_chats), f)
+
+
+active_chats = load_groups()
 
 
 def roll_dice():
@@ -21,6 +39,7 @@ def get_result(total):
 
 
 def auto_time_allowed():
+
     now = datetime.now(UTC8)
     hour = now.hour
 
@@ -33,26 +52,47 @@ def auto_time_allowed():
     return False
 
 
+async def is_admin(update, context):
+
+    chat = update.effective_chat
+
+    if chat.type == "private":
+        return True
+
+    member = await context.bot.get_chat_member(chat.id, update.effective_user.id)
+
+    return member.status in ["administrator","creator"]
+
+
 async def help(update: Update, context: ContextTypes.DEFAULT_TYPE):
 
+    chat_id = update.effective_chat.id
+
+    active_chats.add(chat_id)
+    save_groups()
+
     await update.message.reply_text(
-        "🎰 CASINO BOT\n\n"
-        "/smart - 开始游戏\n"
-        "/open - 立即开奖\n"
-        "/stop - 停止游戏\n"
-        "/help - 帮助\n\n"
-        "下注方式：\n"
-        "Tài / Xỉu"
+        "🎰 BOT CASINO TÀI XỈU\n\n"
+        "/smart - Mở bàn casino\n"
+        "/open - Mở kết quả ngay\n"
+        "/stop - Dừng casino\n"
+        "/help - Trợ giúp"
     )
 
 
 async def smart(update: Update, context: ContextTypes.DEFAULT_TYPE):
 
     chat_id = update.effective_chat.id
+
+    if not await is_admin(update,context):
+        await update.message.reply_text("❌ Chỉ admin mới được mở casino")
+        return
+
     active_chats.add(chat_id)
+    save_groups()
 
     if chat_id in games:
-        await update.message.reply_text("⚠️ Casino正在运行")
+        await update.message.reply_text("⚠️ Casino đang hoạt động")
         return
 
     games[chat_id] = {
@@ -63,7 +103,7 @@ async def smart(update: Update, context: ContextTypes.DEFAULT_TYPE):
         "manual": True
     }
 
-    await update.message.reply_text("🎰 CASINO 已开启")
+    await update.message.reply_text("🎰 CASINO ĐÃ MỞ")
 
     context.application.create_task(game_loop(context, chat_id))
 
@@ -72,20 +112,28 @@ async def stop(update: Update, context: ContextTypes.DEFAULT_TYPE):
 
     chat_id = update.effective_chat.id
 
+    if not await is_admin(update,context):
+        await update.message.reply_text("❌ Chỉ admin mới được dừng casino")
+        return
+
     if chat_id in games:
         games.pop(chat_id)
 
-        await update.message.reply_text("🛑 CASINO 已停止")
+        await update.message.reply_text("🛑 CASINO ĐÃ DỪNG")
 
 
 async def open_now(update: Update, context: ContextTypes.DEFAULT_TYPE):
 
     chat_id = update.effective_chat.id
 
+    if not await is_admin(update,context):
+        await update.message.reply_text("❌ Chỉ admin mới được mở kết quả")
+        return
+
     if chat_id in games:
         games[chat_id]["force_open"] = True
 
-        await update.message.reply_text("⚡ 即将开奖")
+        await update.message.reply_text("⚡ Sắp mở kết quả")
 
 
 async def bet(update: Update, context: ContextTypes.DEFAULT_TYPE):
@@ -107,12 +155,13 @@ async def bet(update: Update, context: ContextTypes.DEFAULT_TYPE):
 
     games[chat_id]["bets"][user_id] = (name,choice)
 
-    await update.message.reply_text(f"✅ {name} 已下注 {choice}")
+    await update.message.reply_text(f"✅ {name} cược {choice}")
 
 
 async def game_loop(context: ContextTypes.DEFAULT_TYPE, chat_id):
 
     chat = await context.bot.get_chat(chat_id)
+
     private_mode = chat.type == "private"
 
     while chat_id in games:
@@ -125,7 +174,7 @@ async def game_loop(context: ContextTypes.DEFAULT_TYPE, chat_id):
 
                 await context.bot.send_message(
                     chat_id=chat_id,
-                    text="⏰ Casino已关闭"
+                    text="⏰ Casino đã đóng"
                 )
 
                 games.pop(chat_id)
@@ -140,7 +189,7 @@ async def game_loop(context: ContextTypes.DEFAULT_TYPE, chat_id):
 
         msg = await context.bot.send_message(
             chat_id=chat_id,
-            text=f"🎲 第 {game['round']} 局\n\n开始下注"
+            text=f"🎲 BÀN #{game['round']}\n\n⏳ Còn 60 giây"
         )
 
 
@@ -155,7 +204,7 @@ async def game_loop(context: ContextTypes.DEFAULT_TYPE, chat_id):
                     await context.bot.edit_message_text(
                         chat_id=chat_id,
                         message_id=msg.message_id,
-                        text=f"🎲 第 {game['round']} 局\n\n⏳ 剩余 {game['countdown']} 秒"
+                        text=f"🎲 BÀN #{game['round']}\n\n⏳ Còn {game['countdown']} giây"
                     )
                 except:
                     pass
@@ -170,9 +219,8 @@ async def game_loop(context: ContextTypes.DEFAULT_TYPE, chat_id):
 
         await context.bot.send_message(
             chat_id=chat_id,
-            text="🔒 已封盘\n🎲 正在摇骰子..."
+            text="🔒 ĐÃ KHÓA CƯỢC\n🎲 Đang lắc..."
         )
-
 
         await asyncio.sleep(2)
 
@@ -193,17 +241,17 @@ async def game_loop(context: ContextTypes.DEFAULT_TYPE, chat_id):
 
 
         message = f"""
-🎲 开奖结果
+🎲 KẾT QUẢ
 
-🎯 骰子: {d1} - {d2} - {d3}
-🔢 总数: {total}
-📢 结果: {result}
+🎯 Xúc xắc: {d1} - {d2} - {d3}
+🔢 Tổng: {total}
+📢 Kết quả: {result}
 """
 
 
         if winners:
 
-            message += "\n🏆 赢家:\n"
+            message += "\n🏆 Người thắng:\n"
 
             message += "\n".join(winners)
 
@@ -214,7 +262,6 @@ async def game_loop(context: ContextTypes.DEFAULT_TYPE, chat_id):
         await asyncio.sleep(8)
 
 
-        # 私聊只运行一局
         if private_mode:
 
             games.pop(chat_id)
@@ -230,7 +277,6 @@ async def auto_scheduler(context: ContextTypes.DEFAULT_TYPE):
 
             chat = await context.bot.get_chat(chat_id)
 
-            # 私聊禁止自动
             if chat.type == "private":
                 continue
 
@@ -249,7 +295,7 @@ async def auto_scheduler(context: ContextTypes.DEFAULT_TYPE):
 
                     await context.bot.send_message(
                         chat_id=chat_id,
-                        text="🎰 CASINO 自动开启"
+                        text="🎰 CASINO TỰ ĐỘNG MỞ"
                     )
 
                     context.application.create_task(
@@ -262,7 +308,7 @@ async def auto_scheduler(context: ContextTypes.DEFAULT_TYPE):
 
                     await context.bot.send_message(
                         chat_id=chat_id,
-                        text="⏰ Casino时间结束"
+                        text="⏰ HẾT GIỜ CASINO"
                     )
 
                     games.pop(chat_id)
@@ -275,21 +321,16 @@ def main():
 
     app = ApplicationBuilder().token(TOKEN).build()
 
-
     app.add_handler(CommandHandler("smart",smart))
     app.add_handler(CommandHandler("help",help))
     app.add_handler(CommandHandler("open",open_now))
     app.add_handler(CommandHandler("stop",stop))
 
-
     app.add_handler(MessageHandler(filters.TEXT & ~filters.COMMAND,bet))
 
-
-    print("Bot casino running...")
-
+    print("Casino bot running...")
 
     app.job_queue.run_once(auto_scheduler,5)
-
 
     app.run_polling()
 
