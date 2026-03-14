@@ -73,14 +73,14 @@ async def help(update: Update, context: ContextTypes.DEFAULT_TYPE):
 
     await update.message.reply_text(
         "🎰 BOT CASINO TÀI XỈU\n\n"
-        "/smart - Mở bàn casino\n"
+        "/start - Mở bàn casino\n"
         "/open - Mở kết quả ngay\n"
         "/stop - Dừng casino\n"
         "/help - Trợ giúp"
     )
 
 
-async def smart(update: Update, context: ContextTypes.DEFAULT_TYPE):
+async def start(update: Update, context: ContextTypes.DEFAULT_TYPE):
 
     chat_id = update.effective_chat.id
 
@@ -321,7 +321,7 @@ def main():
 
     app = ApplicationBuilder().token(TOKEN).build()
 
-    app.add_handler(CommandHandler("smart",smart))
+    app.add_handler(CommandHandler("start",start))
     app.add_handler(CommandHandler("help",help))
     app.add_handler(CommandHandler("open",open_now))
     app.add_handler(CommandHandler("stop",stop))
